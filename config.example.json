@@ -1,0 +1,9 @@
+{
+  "router": {
+    "name": "branch-office",
+    "host": "192.168.88.1",
+    "port": 22,
+    "username": "admin",
+    "password": "changeme"
+  }
+}
