@@ -12,6 +12,9 @@ import socket
 
 import paramiko
 
+from notify import send_webhook
+from oui import lookup_vendor
+
 ARP_ENTRY_RE = re.compile(r"address=(\S+).*?mac-address=(\S+)")
 DEFAULT_TIMEOUT = 10
 DEFAULT_STATE_PATH = "state.json"
@@ -78,7 +81,9 @@ def main():
     args = parser.parse_args()
 
     with open(args.config_file) as f:
-        router = json.load(f)["router"]
+        config = json.load(f)
+    router = config["router"]
+    notify_cfg = config.get("notify")
 
     entries = fetch_arp_table(router)
     state = load_state(args.state)
@@ -87,13 +92,19 @@ def main():
     if new_entries:
         print(f"{len(new_entries)} new device(s):")
         for e in new_entries:
-            print(f"  {e['mac']}  {e['ip']}")
+            print(f"  {e['mac']}  {e['ip']}  ({lookup_vendor(e['mac'])})")
     if removed_macs:
         print(f"{len(removed_macs)} device(s) no longer present:")
         for mac in removed_macs:
             print(f"  {mac}")
     if not new_entries and not removed_macs:
         print("No changes.")
+
+    if new_entries and notify_cfg and notify_cfg.get("webhook_url"):
+        lines = [f"New device on {router.get('name', router['host'])}: "
+                 f"{e['mac']} ({lookup_vendor(e['mac'])}) at {e['ip']}" for e in new_entries]
+        send_webhook(notify_cfg["webhook_url"], notify_cfg.get("webhook_type", "generic"),
+                     "\n".join(lines))
 
     state["known_macs"] = sorted({e["mac"] for e in entries})
     save_state(args.state, state)
